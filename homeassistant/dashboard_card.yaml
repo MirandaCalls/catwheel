@@ -1,0 +1,41 @@
+# Dashboard card. In a dashboard: Edit -> Add card -> Manual, then paste this.
+# Entity IDs assume the device is named "Cat Wheel"; check yours under
+# Settings -> Devices & services -> MQTT -> Cat Wheel.
+type: vertical-stack
+cards:
+  - type: entities
+    title: Cat wheel
+    entities:
+      - entity: sensor.cat_wheel_daily_distance
+        name: Today
+      - entity: sensor.cat_wheel_lifetime_distance
+        name: Lifetime
+      - entity: sensor.cat_wheel_speed
+      - entity: binary_sensor.cat_wheel_running
+  - type: statistics-graph
+    title: Today, by hour
+    entities:
+      - sensor.cat_wheel_lifetime_distance
+    stat_types:
+      - change
+    period: hour
+    days_to_show: 1
+    chart_type: bar
+  - type: statistics-graph
+    title: Distance per day
+    entities:
+      - sensor.cat_wheel_lifetime_distance
+    stat_types:
+      - change
+    period: day
+    days_to_show: 30
+    chart_type: bar
+  - type: statistics-graph
+    title: Lifetime
+    entities:
+      - sensor.cat_wheel_lifetime_distance
+    stat_types:
+      - state
+    period: week
+    days_to_show: 365
+    chart_type: line
