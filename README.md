@@ -14,29 +14,42 @@ Planned: dispense food once she's run far enough (see [Roadmap](#roadmap)).
 
 - Raspberry Pi Pico 2 W
 - Any basic wired USB optical mouse
-- A micro-USB OTG adapter (micro-USB male to USB-A female)
-- A 5V power supply wired to the Pico's VBUS pin (e.g. an old USB phone
-  charger with the cable cut, or a USB breakout board)
+- A **powered OTG Y-cable**: USB-A female for the mouse, a micro-USB male
+  plug for the Pico (data + power), and a separate power plug. These are sold
+  as "micro USB OTG cable with power", e.g. for Fire TV sticks.
+- A 5V USB power supply (any phone charger)
 - Optional: a USB-serial adapter or Raspberry Pi Debug Probe for logs
 - Optional: a strip of matte paper or tape where the mouse reads the wheel
 
 ### Wiring
 
 The Pico's micro-USB port runs as a **USB host** using the RP2350's built-in
-USB controller. The mouse plugs into it through the OTG adapter. Since that
-port no longer powers the Pico, power comes in on the VBUS pin, which also
-feeds 5V to the mouse.
+USB controller. The powered OTG Y-cable does all the wiring:
+
+```
+[Mouse] --> USB-A female --+-- micro-USB plug --> Pico 2 W (data + 5V)
+                           |
+            power plug ----+  <-- 5V USB charger
+```
+
+The charger's 5V feeds both the mouse and the Pico (through the cable's
+micro-USB plug), so no soldering is needed.
+
+Optional log adapter, for debugging:
 
 | Connection | Pico 2 W pin |
 |---|---|
-| 5V supply + | VBUS (pin 40) |
-| 5V supply − | GND (pin 38) |
-| Mouse | micro-USB port, via OTG adapter |
-| Optional log adapter RX | GP0 / UART0 TX (pin 1) |
-| Optional log adapter GND | GND (pin 3) |
+| Log adapter RX | GP0 / UART0 TX (pin 1) |
+| Log adapter GND | GND (pin 3) |
 
-**Never connect the Pico to a computer while the 5V supply is connected to
-VBUS.** Both would drive the same 5V line.
+<details>
+<summary>Without a Y-cable</summary>
+
+Use a plain OTG adapter (micro-USB male to USB-A female) and wire a 5V
+supply to VBUS (pin 40) and GND (pin 38). VBUS feeds the mouse through the
+micro-USB port. **Never connect the Pico to a computer while that supply is
+connected**, because both would drive the same 5V line.
+</details>
 
 ### Mounting the mouse
 
@@ -99,8 +112,9 @@ Uses [PlatformIO](https://platformio.org/) with the
 
 1. Copy `include/secrets.example.h` to `include/secrets.h` and fill in your
    Wi-Fi, MQTT and OTA details.
-2. **First flash, over USB.** Disconnect the 5V supply and the mouse. Hold
-   **BOOTSEL** while plugging the Pico into your computer, then:
+2. **First flash, over USB.** Unplug the Y-cable from the Pico and connect
+   the Pico to your computer with a normal micro-USB cable while holding
+   **BOOTSEL**, then:
    ```sh
    pio run -e pico2w -t upload
    ```
