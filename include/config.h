@@ -1,21 +1,6 @@
 #pragma once
 
 // ---------------------------------------------------------------------------
-// Wiring
-// ---------------------------------------------------------------------------
-
-// USB host port for the mouse, bit-banged by PIO-USB. D- must be D+ + 1.
-constexpr uint8_t PIN_USB_HOST_DP = 16;  // GP16 -> mouse D+ (usually green)
-                                         // GP17 -> mouse D- (usually white)
-
-// The Pico 2 W has three PIO blocks. The Wi-Fi chip claims a free state
-// machine on PIO0, so keep USB host on PIO2 to stay out of its way.
-constexpr uint8_t USB_HOST_PIO = 2;
-// DMA channel used by PIO-USB for transmit. High number avoids the channels
-// the Wi-Fi driver grabs first.
-constexpr uint8_t USB_HOST_DMA_CH = 11;
-
-// ---------------------------------------------------------------------------
 // Calibration
 // ---------------------------------------------------------------------------
 

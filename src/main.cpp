@@ -4,9 +4,13 @@
 // Core 1 runs the USB host that reads the mouse (see wheel_mouse.cpp).
 // Core 0 (this file) converts counts to distance, saves the lifetime total
 // to flash, and talks to Home Assistant.
+//
+// The micro-USB port is busy as the mouse's host port, so logs go to UART0
+// (GP0 TX, GP1 RX) and firmware updates go over Wi-Fi.
 
 #include <Arduino.h>
 #include <ArduinoHA.h>
+#include <ArduinoOTA.h>
 #include <LittleFS.h>
 #include <WiFi.h>
 
@@ -18,6 +22,9 @@
 #else
 #error "Copy include/secrets.example.h to include/secrets.h and fill it in."
 #endif
+
+// Debug log on UART0; read it with a USB-serial adapter or a Debug Probe.
+#define Log Serial1
 
 namespace {
 
@@ -60,7 +67,7 @@ void loadLifetime() {
 void saveLifetime() {
   File f = LittleFS.open(LIFETIME_FILE, "w");
   if (!f) {
-    Serial.println("Failed to save lifetime distance");
+    Log.println("Failed to save lifetime distance");
     return;
   }
   f.write(reinterpret_cast<const uint8_t*>(&lifetimeMeters), sizeof(lifetimeMeters));
@@ -117,16 +124,25 @@ void updateSpeed(uint32_t now, uint32_t counts) {
 }  // namespace
 
 void setup() {
-  Serial.begin(115200);
+  Log.begin(115200);
 
   if (!LittleFS.begin()) {
-    Serial.println("LittleFS mount failed; lifetime distance won't persist");
+    Log.println("LittleFS mount failed; lifetime distance won't persist");
   }
   loadLifetime();
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   setupHomeAssistant();
+
+  ArduinoOTA.setHostname("catwheel");
+  ArduinoOTA.setPassword(OTA_PASSWORD);
+  // Save the distance so far before the update reboots the Pico. LittleFS
+  // stays mounted: the update image is staged there.
+  ArduinoOTA.onStart([] {
+    if (unsavedDistance) saveLifetime();
+  });
+  ArduinoOTA.begin();
 
   // Values HA shows before the wheel first moves.
   lifetimeSensor.setCurrentValue(float(lifetimeMeters));
@@ -156,7 +172,7 @@ void loop() {
     rawCountsSensor.setValue(sessionCounts);
     unpublishedDistance = false;
     lastPublishMs = now;
-    Serial.printf("counts=%lu lifetime=%.2f m\n", (unsigned long)sessionCounts,
+    Log.printf("counts=%lu lifetime=%.2f m\n", (unsigned long)sessionCounts,
                   lifetimeMeters);
   }
 
@@ -165,6 +181,7 @@ void loop() {
   }
 
   mqtt.loop();
+  ArduinoOTA.handle();
 }
 
 // Core 1: USB host for the mouse.

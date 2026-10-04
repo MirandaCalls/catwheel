@@ -7,32 +7,36 @@ turns the motion into distance and publishes it over MQTT.
 Planned: dispense food once she's run far enough (see [Roadmap](#roadmap)).
 
 ```
-[USB mouse] --GP16/GP17--> [Pico 2 W] --Wi-Fi/MQTT--> [Mosquitto] --> [Home Assistant]
+[USB mouse] --OTG adapter--> [Pico 2 W] --Wi-Fi/MQTT--> [Mosquitto] --> [Home Assistant]
 ```
 
 ## Hardware
 
 - Raspberry Pi Pico 2 W
-- Any wired USB optical mouse
-- A USB-A female socket/breakout, or cut the mouse cable
+- Any basic wired USB optical mouse
+- A micro-USB OTG adapter (micro-USB male to USB-A female)
+- A 5V power supply wired to the Pico's VBUS pin (e.g. an old USB phone
+  charger with the cable cut, or a USB breakout board)
+- Optional: a USB-serial adapter or Raspberry Pi Debug Probe for logs
 - Optional: a strip of matte paper or tape where the mouse reads the wheel
 
 ### Wiring
 
-The Pico's own micro-USB port stays free for power, flashing and the serial
-monitor. The mouse is connected to a second USB host port that the firmware
-emulates on two GPIO pins with [Pico-PIO-USB](https://github.com/sekigon-gonnoc/Pico-PIO-USB).
+The Pico's micro-USB port runs as a **USB host** using the RP2350's built-in
+USB controller. The mouse plugs into it through the OTG adapter. Since that
+port no longer powers the Pico, power comes in on the VBUS pin, which also
+feeds 5V to the mouse.
 
-| Mouse wire (usual color) | Pico 2 W pin |
+| Connection | Pico 2 W pin |
 |---|---|
-| 5V (red)      | VBUS (pin 40) |
-| GND (black)   | GND (pin 38)  |
-| D+ (green)    | GP16 (pin 21) |
-| D- (white)    | GP17 (pin 22) |
+| 5V supply + | VBUS (pin 40) |
+| 5V supply − | GND (pin 38) |
+| Mouse | micro-USB port, via OTG adapter |
+| Optional log adapter RX | GP0 / UART0 TX (pin 1) |
+| Optional log adapter GND | GND (pin 3) |
 
-Wire colors aren't guaranteed; check with a multimeter if in doubt. VBUS
-carries 5V only when the Pico is powered from its micro-USB port, which is
-the expected setup.
+**Never connect the Pico to a computer while the 5V supply is connected to
+VBUS.** Both would drive the same 5V line.
 
 ### Mounting the mouse
 
@@ -51,7 +55,12 @@ the expected setup.
 The Pico talks to Home Assistant through **MQTT**, a lightweight publish and
 subscribe protocol. The Pico publishes readings to an MQTT *broker*, and Home
 Assistant subscribes to them. **Mosquitto** is the broker. It isn't part of
-Home Assistant itself but is available as an official add-on:
+Home Assistant itself but is available as an official add-on, which runs on
+the same machine as Home Assistant. Add-ons need Home Assistant OS or a
+Supervised install (check **Settings → System → About → Installation Type**).
+On HA Container or Core, run Mosquitto yourself, e.g. the `eclipse-mosquitto`
+Docker image, and add the MQTT integration pointing at it.
+
 
 1. **Settings → Add-ons → Add-on Store → Mosquitto broker → Install**, then
    **Start**.
@@ -89,14 +98,29 @@ Uses [PlatformIO](https://platformio.org/) with the
 [Arduino-Pico](https://github.com/earlephilhower/arduino-pico) core.
 
 1. Copy `include/secrets.example.h` to `include/secrets.h` and fill in your
-   Wi-Fi and MQTT details.
-2. Hold **BOOTSEL** on the Pico while plugging it in, then:
+   Wi-Fi, MQTT and OTA details.
+2. **First flash, over USB.** Disconnect the 5V supply and the mouse. Hold
+   **BOOTSEL** while plugging the Pico into your computer, then:
    ```sh
-   pio run -t upload
+   pio run -e pico2w -t upload
    ```
    Or copy `.pio/build/pico2w/firmware.uf2` onto the `RP2350` drive that
    appears.
-3. Watch the output with `pio device monitor`.
+3. **Later updates, over Wi-Fi.** With the Pico running on the wheel:
+   ```sh
+   export CATWHEEL_OTA_PASSWORD=<the OTA_PASSWORD from secrets.h>
+   pio run -e ota -t upload
+   ```
+   This finds the Pico as `catwheel.local`. If mDNS doesn't work on your
+   network, change `upload_port` in `platformio.ini` to its IP address.
+
+### Logs
+
+The USB port is busy with the mouse, so the firmware logs to UART0 at 115200
+baud. Connect a USB-serial adapter's RX to GP0 (and GND to GND) and run
+`pio device monitor -p <adapter port>`. You can also skip this:
+**Raw mouse counts** and **Mouse connected** in Home Assistant cover most
+debugging.
 
 ## Calibration
 
@@ -107,7 +131,7 @@ travel. This depends on the mouse, the surface and the mounting.
    On the side face, that's twice the distance from the axle to the sensor,
    not the outer diameter.
 2. Put a piece of tape on the wheel as a marker. Note **Raw mouse counts**
-   (in Home Assistant or the serial monitor).
+   (in Home Assistant or the logs).
 3. Turn the wheel exactly 10 full turns by hand, at roughly cat speed.
 4. Note the counts again, then calculate:
    ```

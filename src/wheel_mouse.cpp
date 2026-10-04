@@ -5,8 +5,6 @@
 #include <math.h>
 
 #include "Adafruit_TinyUSB.h"
-#include "pio_usb.h"
-#include "config.h"
 
 namespace {
 
@@ -32,15 +30,10 @@ void addMotion(int dx, int dy) {
 namespace WheelMouse {
 
 void begin() {
-  pio_usb_configuration_t cfg = PIO_USB_DEFAULT_CONFIG;
-  cfg.pin_dp = PIN_USB_HOST_DP;
-  cfg.pio_tx_num = USB_HOST_PIO;
-  cfg.pio_rx_num = USB_HOST_PIO;
-  cfg.tx_ch = USB_HOST_DMA_CH;
-  usbHost.configure_pio_usb(1, &cfg);
   // Boot protocol gives every mouse the same simple report layout.
   tuh_hid_set_default_protocol(HID_PROTOCOL_BOOT);
-  usbHost.begin(1);
+  // Root port 0 is the native micro-USB port.
+  usbHost.begin(0);
 }
 
 void task() { usbHost.task(); }

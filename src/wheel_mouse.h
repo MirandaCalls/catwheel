@@ -2,7 +2,8 @@
 
 #include <stdint.h>
 
-// Reads relative motion from a USB mouse attached to the PIO-USB host port.
+// Reads relative motion from a USB mouse plugged into the micro-USB port
+// (running as a USB host through an OTG adapter).
 // The USB host stack runs on core 1; everything here is safe to call from
 // core 0.
 namespace WheelMouse {
