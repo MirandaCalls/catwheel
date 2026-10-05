@@ -6,22 +6,18 @@
 // to flash, and talks to Home Assistant.
 //
 // The micro-USB port is busy as the mouse's host port, so logs go to UART0
-// (GP0 TX, GP1 RX) and firmware updates go over Wi-Fi.
+// (GP0 TX, GP1 RX). Settings and firmware updates go through web pages (see
+// web_ui.cpp), so everything can be done from a phone or tablet.
 
 #include <Arduino.h>
 #include <ArduinoHA.h>
-#include <ArduinoOTA.h>
 #include <LittleFS.h>
 #include <WiFi.h>
 
 #include "config.h"
+#include "settings.h"
+#include "web_ui.h"
 #include "wheel_mouse.h"
-
-#if __has_include("secrets.h")
-#include "secrets.h"
-#else
-#error "Copy include/secrets.example.h to include/secrets.h and fill it in."
-#endif
 
 // Debug log on UART0; read it with a USB-serial adapter or a Debug Probe.
 #define Log Serial1
@@ -29,6 +25,16 @@
 namespace {
 
 constexpr const char* LIFETIME_FILE = "/lifetime.bin";
+// Present when the next boot should start the setup network.
+constexpr const char* SETUP_REQUEST_FILE = "/setup_requested";
+
+Settings settings;
+bool setupMode = false;
+bool webStarted = false;
+bool everConnected = false;
+uint32_t lastWifiAttemptMs = 0;
+uint32_t bootselPressedMs = 0;
+uint32_t lastBootselPollMs = 0;
 
 WiFiClient wifiClient;
 HADevice device;
@@ -76,6 +82,73 @@ void saveLifetime() {
   lastSaveMs = millis();
 }
 
+void saveIfNeeded() {
+  if (unsavedDistance) saveLifetime();
+}
+
+// Restarts into setup mode. Going through a restart keeps the web server's
+// two configurations (setup network vs. home network) from ever mixing.
+void restartIntoSetup() {
+  Log.println("Restarting into setup mode");
+  File f = LittleFS.open(SETUP_REQUEST_FILE, "w");
+  if (f) f.close();
+  saveIfNeeded();
+  rp2040.reboot();
+}
+
+void startSetupMode() {
+  setupMode = true;
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(SETUP_NETWORK_NAME);
+  WebUi::beginSetup(settings, saveIfNeeded);
+  Log.printf("Setup mode: join Wi-Fi \"%s\" and open http://%s/\n", SETUP_NETWORK_NAME,
+             WiFi.softAPIP().toString().c_str());
+}
+
+WebUi::Status currentStatus() {
+  return {lifetimeMeters, sessionCounts, WheelMouse::connected(), mqtt.isConnected()};
+}
+
+// Normal mode: keeps Wi-Fi up, starts the web pages once connected, and falls
+// back to the setup network if the home network never comes up.
+void serviceWifi(uint32_t now) {
+  if (WiFi.status() == WL_CONNECTED) {
+    if (!everConnected) {
+      everConnected = true;
+      Log.printf("Wi-Fi connected: http://catwheel.local/ (%s)\n",
+                 WiFi.localIP().toString().c_str());
+    }
+    if (!webStarted) {
+      WebUi::beginNormal(settings, currentStatus, saveIfNeeded);
+      webStarted = true;
+    }
+    if (settings.mqttHost.length()) mqtt.loop();
+    return;
+  }
+
+  if (!everConnected && now >= WIFI_SETUP_FALLBACK_MS) {
+    Log.println("Couldn't join Wi-Fi");
+    restartIntoSetup();
+  }
+  if (now - lastWifiAttemptMs >= WIFI_RETRY_MS) {
+    lastWifiAttemptMs = now;
+    WiFi.beginNoBlock(settings.wifiSsid.c_str(), settings.wifiPassword.c_str());
+  }
+}
+
+// Holding BOOTSEL for a few seconds opens the setup network, e.g. after
+// changing Wi-Fi networks. Polled slowly: reading it briefly pauses core 1.
+void checkBootsel(uint32_t now) {
+  if (now - lastBootselPollMs < 250) return;
+  lastBootselPollMs = now;
+  if (!BOOTSEL) {
+    bootselPressedMs = 0;
+    return;
+  }
+  if (!bootselPressedMs) bootselPressedMs = now;
+  if (now - bootselPressedMs >= BOOTSEL_SETUP_HOLD_MS) restartIntoSetup();
+}
+
 void setupHomeAssistant() {
   byte mac[6];
   WiFi.macAddress(mac);
@@ -107,7 +180,11 @@ void setupHomeAssistant() {
   mouseSensor.setName("Mouse connected");
   mouseSensor.setDeviceClass("connectivity");
 
-  mqtt.begin(MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASSWORD);
+  if (settings.mqttHost.length()) {
+    mqtt.begin(settings.mqttHost.c_str(), settings.mqttPort,
+               settings.mqttUser.length() ? settings.mqttUser.c_str() : nullptr,
+               settings.mqttPassword.length() ? settings.mqttPassword.c_str() : nullptr);
+  }
 }
 
 void updateSpeed(uint32_t now, uint32_t counts) {
@@ -115,7 +192,7 @@ void updateSpeed(uint32_t now, uint32_t counts) {
   uint32_t elapsed = now - speedWindowStartMs;
   if (elapsed < SPEED_WINDOW_MS) return;
 
-  float metersPerSecond = (speedWindowCounts / COUNTS_PER_METER) / (elapsed / 1000.0f);
+  float metersPerSecond = (speedWindowCounts / settings.countsPerMeter) / (elapsed / 1000.0f);
   speedSensor.setValue(metersPerSecond * 3.6f);
   speedWindowStartMs = now;
   speedWindowCounts = 0;
@@ -131,18 +208,19 @@ void setup() {
   }
   loadLifetime();
 
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  setupHomeAssistant();
+  settings.load();
 
-  ArduinoOTA.setHostname("catwheel");
-  ArduinoOTA.setPassword(OTA_PASSWORD);
-  // Save the distance so far before the update reboots the Pico. LittleFS
-  // stays mounted: the update image is staged there.
-  ArduinoOTA.onStart([] {
-    if (unsavedDistance) saveLifetime();
-  });
-  ArduinoOTA.begin();
+  bool setupRequested = LittleFS.exists(SETUP_REQUEST_FILE);
+  if (setupRequested) LittleFS.remove(SETUP_REQUEST_FILE);
+  if (setupRequested || !settings.configured()) {
+    startSetupMode();
+  } else {
+    WiFi.mode(WIFI_STA);
+    WiFi.setHostname("catwheel");
+    WiFi.beginNoBlock(settings.wifiSsid.c_str(), settings.wifiPassword.c_str());
+    lastWifiAttemptMs = millis();
+    setupHomeAssistant();
+  }
 
   // Values HA shows before the wheel first moves.
   lifetimeSensor.setCurrentValue(float(lifetimeMeters));
@@ -156,7 +234,7 @@ void loop() {
 
   if (counts) {
     sessionCounts += counts;
-    lifetimeMeters += counts / COUNTS_PER_METER;
+    lifetimeMeters += counts / settings.countsPerMeter;
     lastMotionMs = now;
     unsavedDistance = true;
     unpublishedDistance = true;
@@ -168,9 +246,9 @@ void loop() {
   updateSpeed(now, counts);
 
   if (unpublishedDistance && now - lastPublishMs >= PUBLISH_INTERVAL_MS) {
-    lifetimeSensor.setValue(float(lifetimeMeters));
+    // Only counts as published once MQTT accepted it; otherwise retry later.
+    unpublishedDistance = !lifetimeSensor.setValue(float(lifetimeMeters));
     rawCountsSensor.setValue(sessionCounts);
-    unpublishedDistance = false;
     lastPublishMs = now;
     Log.printf("counts=%lu lifetime=%.2f m\n", (unsigned long)sessionCounts,
                   lifetimeMeters);
@@ -180,8 +258,18 @@ void loop() {
     saveLifetime();
   }
 
-  mqtt.loop();
-  ArduinoOTA.handle();
+  if (setupMode) {
+    // Give up on setup after a while if there are settings to go back to,
+    // e.g. the home network was only down temporarily.
+    if (settings.configured() && now - WebUi::lastRequestMs() >= SETUP_IDLE_TIMEOUT_MS) {
+      saveIfNeeded();
+      rp2040.reboot();
+    }
+  } else {
+    serviceWifi(now);
+    checkBootsel(now);
+  }
+  if (setupMode || webStarted) WebUi::loop();
 }
 
 // Core 1: USB host for the mouse.

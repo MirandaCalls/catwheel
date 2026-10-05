@@ -74,7 +74,6 @@ Supervised install (check **Settings → System → About → Installation Type*
 On HA Container or Core, run Mosquitto yourself, e.g. the `eclipse-mosquitto`
 Docker image, and add the MQTT integration pointing at it.
 
-
 1. **Settings → Add-ons → Add-on Store → Mosquitto broker → Install**, then
    **Start**.
 2. Home Assistant will offer to set up the discovered **MQTT** integration
@@ -84,7 +83,7 @@ Docker image, and add the MQTT integration pointing at it.
    may need to enable *Advanced mode* in your user profile to see the Users
    tab.
 
-After you flash the Pico, a **Cat Wheel** device appears automatically under
+Once the Pico is set up (see below), a **Cat Wheel** device appears automatically under
 the MQTT integration (via MQTT discovery) with these entities:
 
 | Entity | Description |
@@ -105,36 +104,64 @@ the MQTT integration (via MQTT discovery) with these entities:
   30 days, and the lifetime total. These use Home Assistant's long-term
   statistics, so history goes back as long as the sensor has existed.
 
-## Building and flashing
+## Installing the firmware
 
-Uses [PlatformIO](https://platformio.org/) with the
-[Arduino-Pico](https://github.com/earlephilhower/arduino-pico) core.
+Everything below works from an iPad or phone. No computer is needed.
 
-1. Copy `include/secrets.example.h` to `include/secrets.h` and fill in your
-   Wi-Fi, MQTT and OTA details.
-2. **First flash, over USB.** Unplug the Y-cable from the Pico and connect
-   the Pico to your computer with a normal micro-USB cable while holding
-   **BOOTSEL**, then:
-   ```sh
-   pio run -e pico2w -t upload
-   ```
-   Or copy `.pio/build/pico2w/firmware.uf2` onto the `RP2350` drive that
-   appears.
-3. **Later updates, over Wi-Fi.** With the Pico running on the wheel:
-   ```sh
-   export CATWHEEL_OTA_PASSWORD=<the OTA_PASSWORD from secrets.h>
-   pio run -e ota -t upload
-   ```
-   This finds the Pico as `catwheel.local`. If mDNS doesn't work on your
-   network, change `upload_port` in `platformio.ini` to its IP address.
+### 1. Get the firmware
 
-### Logs
+GitHub builds it automatically on every change (see
+[`.github/workflows/build.yml`](.github/workflows/build.yml)):
+
+- **Releases**: on the repo's **Releases** page, download `catwheel.uf2` and
+  `catwheel.bin` from the latest release.
+- **Latest build**: open **Actions → Build firmware**, pick the newest run,
+  and download **catwheel-firmware** at the bottom. It's a zip; tap it in the
+  Files app to unpack.
+
+The firmware contains no passwords, so it's safe to build in a public repo.
+
+### 2. First install (USB)
+
+1. Hold **BOOTSEL** on the Pico while plugging it into the iPad (USB-C to
+   micro-USB cable, or Apple's Lightning to USB camera adapter).
+2. A drive named **RP2350** appears in the Files app. Copy `catwheel.uf2`
+   onto it. The Pico restarts by itself when the copy finishes.
+3. Unplug it and connect it to the Y-cable, mouse and charger.
+
+### 3. Setup
+
+1. On first boot the Pico creates an open Wi-Fi network called
+   **CatWheel-Setup**. Join it from the iPad and the setup page opens by
+   itself. If it doesn't, open `http://192.168.42.1/settings` in Safari.
+2. Enter your Wi-Fi details, the MQTT broker (your Home Assistant address,
+   e.g. `homeassistant.local`, and the `catwheel` user), and choose an
+   **admin password**.
+3. Tap **Save and restart**, then rejoin your home Wi-Fi.
+
+The Pico now has a page at **http://catwheel.local/** showing distance, mouse
+and Home Assistant status, with links to:
+
+- **Settings**: change any of the above, or the calibration.
+- **Update firmware**: pick a new `catwheel.bin` to install it over Wi-Fi.
+
+Both ask for a login: username `admin` and your admin password.
+
+To get back to the setup network (e.g. after changing Wi-Fi), hold **BOOTSEL**
+for 5 seconds while the Pico is running. It also starts the setup network on
+its own if it can't join your Wi-Fi within 3 minutes of starting, and returns
+to normal after 10 minutes if nobody uses the setup page.
+
+### Building it yourself (optional)
+
+With [PlatformIO](https://platformio.org/) on a computer, `pio run -e pico2w`
+builds the same firmware into `.pio/build/pico2w/`.
+
+### Logs (optional)
 
 The USB port is busy with the mouse, so the firmware logs to UART0 at 115200
-baud. Connect a USB-serial adapter's RX to GP0 (and GND to GND) and run
-`pio device monitor -p <adapter port>`. You can also skip this:
-**Raw mouse counts** and **Mouse connected** in Home Assistant cover most
-debugging.
+baud. Connect a USB-serial adapter's RX to GP0 (and GND to GND). The status
+page and the Home Assistant entities cover most debugging.
 
 ## Calibration
 
@@ -144,18 +171,19 @@ travel. This depends on the mouse, the surface and the mounting.
 1. Measure the wheel's diameter at the point where the mouse reads it.
    On the side face, that's twice the distance from the axle to the sensor,
    not the outer diameter.
-2. Put a piece of tape on the wheel as a marker. Note **Raw mouse counts**
-   (in Home Assistant or the logs).
+2. Put a piece of tape on the wheel as a marker. Note **Raw counts since
+   boot** on http://catwheel.local/ (or **Raw mouse counts** in Home
+   Assistant).
 3. Turn the wheel exactly 10 full turns by hand, at roughly cat speed.
-4. Note the counts again, then calculate:
+4. Reload the page, note the counts again, then calculate:
    ```
-   COUNTS_PER_METER = (counts_after - counts_before) / (10 × π × diameter_m)
+   counts per meter = (counts_after - counts_before) / (10 × π × diameter_m)
    ```
-5. Set `COUNTS_PER_METER` in [`include/config.h`](include/config.h) and
-   re-flash.
+5. Enter it under **Settings → Calibration** and save.
 
 Repeat it a couple of times. If the results vary a lot, the mouse is probably
-too far from the surface or the surface is too shiny.
+too far from the surface or the surface is too shiny. Calibrate before the
+cat starts using the wheel: distance already recorded isn't recalculated.
 
 ## Roadmap
 
