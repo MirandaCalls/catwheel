@@ -31,19 +31,16 @@ jobs:
         run: pip install platformio
 
       - name: Build
-        run: pio run -e picow -e pico2w
+        run: pio run -e picow
 
       - name: Collect firmware
         run: |
           mkdir dist
-          for board in picow pico2w; do
-            cp .pio/build/$board/firmware.uf2 dist/catwheel-$board.uf2
-            cp .pio/build/$board/firmware.bin dist/catwheel-$board.bin
-          done
+          cp .pio/build/picow/firmware.uf2 dist/catwheel.uf2
+          cp .pio/build/picow/firmware.bin dist/catwheel.bin
 
       # Download from the run's summary page. .uf2 is for the first install
-      # (BOOTSEL drive), .bin for the web update page. Pick the files for your
-      # board: picow = Pico W, pico2w = Pico 2 W.
+      # (BOOTSEL drive), .bin for the web update page.
       - uses: actions/upload-artifact@v4
         with:
           name: catwheel-firmware

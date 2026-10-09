@@ -1,7 +1,7 @@
 # Cat Wheel
 
 Tracks how far the cat runs on her wheel and reports it to Home Assistant.
-A USB optical mouse reads the wheel's surface, and a Raspberry Pi Pico W (or Pico 2 W)
+A USB optical mouse reads the wheel's surface, and a Raspberry Pi Pico W
 turns the motion into distance and publishes it over MQTT.
 
 Planned: dispense food once she's run far enough (see [Roadmap](#roadmap)).
@@ -12,8 +12,8 @@ Planned: dispense food once she's run far enough (see [Roadmap](#roadmap)).
 
 ## Hardware
 
-- Raspberry Pi **Pico W** or **Pico 2 W**. It must be a W model, because the
-  plain Pico and Pico 2 have no Wi-Fi.
+- Raspberry Pi **Pico W** (the original RP2040 model). The plain Pico has no
+  Wi-Fi, and the Pico 2 W needs a different build.
 - Any basic wired USB optical mouse
 - A **powered OTG Y-cable**: USB-A female for the mouse, a micro-USB male
   plug for the Pico (data + power), and a separate power plug. These are sold
@@ -114,29 +114,23 @@ Apart from the first install, everything below works from an iPad or phone.
 GitHub builds it automatically on every change (see
 [`.github/workflows/build.yml`](.github/workflows/build.yml)):
 
-- **Releases**: on the repo's **Releases** page, download the files for your
-  board from the latest release.
+- **Releases**: on the repo's **Releases** page, download `catwheel.uf2` and
+  `catwheel.bin` from the latest release.
 - **Latest build**: open **Actions → Build firmware**, pick the newest run,
   and download **catwheel-firmware** at the bottom. It's a zip; unpack it.
 
-Each board has its own files. Using the wrong one does nothing, and the Pico
-just stays in BOOTSEL mode:
-
-| Board | First install | Web updates |
-|---|---|---|
-| Pico W (RP2040) | `catwheel-picow.uf2` | `catwheel-picow.bin` |
-| Pico 2 W (RP2350) | `catwheel-pico2w.uf2` | `catwheel-pico2w.bin` |
+`catwheel.uf2` is for the first install over USB, and `catwheel.bin` is for
+updates through the web page.
 
 The firmware contains no passwords, so it's safe to build in a public repo.
 
 ### 2. First install (USB)
 
-This one step needs a computer (Mac, Windows, Linux or Chromebook). The
-iPad's Files app doesn't write to the Pico's drive in a way it accepts.
+Use a computer for this step (Mac, Windows, Linux or Chromebook). Copying
+from the iPad's Files app may also work, but it hasn't been tested.
 
 1. Hold **BOOTSEL** on the Pico while plugging it into the computer.
-2. A drive appears: **RPI-RP2** for a Pico W, **RP2350** for a Pico 2 W.
-   Drag your board's `.uf2` onto it. The drive disappears within a few
+2. A drive named **RPI-RP2** appears. Drag `catwheel.uf2` onto it. The drive disappears within a few
    seconds as the Pico restarts.
 3. Unplug it and connect it to the Y-cable, mouse and charger.
 
@@ -166,7 +160,7 @@ to normal after 10 minutes if nobody uses the setup page.
 ### Building it yourself (optional)
 
 With [PlatformIO](https://platformio.org/) on a computer, `pio run -e picow`
-(or `-e pico2w`) builds the same firmware into `.pio/build/<board>/`.
+builds the same firmware into `.pio/build/picow/`.
 
 ### Logs (optional)
 
