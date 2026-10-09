@@ -1,0 +1,18 @@
+# Home Assistant package for the cat wheel.
+#
+# Copy to <config>/packages/catwheel.yaml and make sure configuration.yaml has:
+#   homeassistant:
+#     packages: !include_dir_named packages
+# Then restart Home Assistant.
+#
+# Alternatively create the same thing in the UI:
+#   Settings -> Devices & services -> Helpers -> Create helper -> Utility meter.
+
+utility_meter:
+  # Resets at midnight. Fed from the lifetime total, so a reboot of the Pico
+  # never loses or double counts distance.
+  cat_wheel_daily_distance:
+    name: Cat wheel daily distance
+    unique_id: cat_wheel_daily_distance
+    source: sensor.cat_wheel_lifetime_distance
+    cycle: daily

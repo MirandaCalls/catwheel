@@ -1,0 +1,53 @@
+name: Build firmware
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write  # Needed to attach firmware to releases.
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio/libdeps
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build
+        run: pio run -e picow
+
+      - name: Collect firmware
+        run: |
+          mkdir dist
+          cp .pio/build/picow/firmware.uf2 dist/catwheel.uf2
+          cp .pio/build/picow/firmware.bin dist/catwheel.bin
+
+      # Download from the run's summary page. .uf2 is for the first install
+      # (BOOTSEL drive), .bin for the web update page.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: catwheel-firmware
+          path: dist/
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
