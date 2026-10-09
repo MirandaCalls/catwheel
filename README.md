@@ -1,18 +1,19 @@
 # Cat Wheel
 
 Tracks how far the cat runs on her wheel and reports it to Home Assistant.
-A USB optical mouse reads the wheel's surface, and a Raspberry Pi Pico 2 W
+A USB optical mouse reads the wheel's surface, and a Raspberry Pi Pico W (or Pico 2 W)
 turns the motion into distance and publishes it over MQTT.
 
 Planned: dispense food once she's run far enough (see [Roadmap](#roadmap)).
 
 ```
-[USB mouse] --OTG adapter--> [Pico 2 W] --Wi-Fi/MQTT--> [Mosquitto] --> [Home Assistant]
+[USB mouse] --OTG adapter--> [Pico W] --Wi-Fi/MQTT--> [Mosquitto] --> [Home Assistant]
 ```
 
 ## Hardware
 
-- Raspberry Pi Pico 2 W
+- Raspberry Pi **Pico W** or **Pico 2 W**. It must be a W model, because the
+  plain Pico and Pico 2 have no Wi-Fi.
 - Any basic wired USB optical mouse
 - A **powered OTG Y-cable**: USB-A female for the mouse, a micro-USB male
   plug for the Pico (data + power), and a separate power plug. These are sold
@@ -23,11 +24,11 @@ Planned: dispense food once she's run far enough (see [Roadmap](#roadmap)).
 
 ### Wiring
 
-The Pico's micro-USB port runs as a **USB host** using the RP2350's built-in
+The Pico's micro-USB port runs as a **USB host** using the chip's built-in
 USB controller. The powered OTG Y-cable does all the wiring:
 
 ```
-[Mouse] --> USB-A female --+-- micro-USB plug --> Pico 2 W (data + 5V)
+[Mouse] --> USB-A female --+-- micro-USB plug --> Pico W (data + 5V)
                            |
             power plug ----+  <-- 5V USB charger
 ```
@@ -37,7 +38,7 @@ micro-USB plug), so no soldering is needed.
 
 Optional log adapter, for debugging:
 
-| Connection | Pico 2 W pin |
+| Connection | Pico pin |
 |---|---|
 | Log adapter RX | GP0 / UART0 TX (pin 1) |
 | Log adapter GND | GND (pin 3) |
@@ -106,27 +107,37 @@ the MQTT integration (via MQTT discovery) with these entities:
 
 ## Installing the firmware
 
-Everything below works from an iPad or phone. No computer is needed.
+Apart from the first install, everything below works from an iPad or phone.
 
 ### 1. Get the firmware
 
 GitHub builds it automatically on every change (see
 [`.github/workflows/build.yml`](.github/workflows/build.yml)):
 
-- **Releases**: on the repo's **Releases** page, download `catwheel.uf2` and
-  `catwheel.bin` from the latest release.
+- **Releases**: on the repo's **Releases** page, download the files for your
+  board from the latest release.
 - **Latest build**: open **Actions → Build firmware**, pick the newest run,
-  and download **catwheel-firmware** at the bottom. It's a zip; tap it in the
-  Files app to unpack.
+  and download **catwheel-firmware** at the bottom. It's a zip; unpack it.
+
+Each board has its own files. Using the wrong one does nothing, and the Pico
+just stays in BOOTSEL mode:
+
+| Board | First install | Web updates |
+|---|---|---|
+| Pico W (RP2040) | `catwheel-picow.uf2` | `catwheel-picow.bin` |
+| Pico 2 W (RP2350) | `catwheel-pico2w.uf2` | `catwheel-pico2w.bin` |
 
 The firmware contains no passwords, so it's safe to build in a public repo.
 
 ### 2. First install (USB)
 
-1. Hold **BOOTSEL** on the Pico while plugging it into the iPad (USB-C to
-   micro-USB cable, or Apple's Lightning to USB camera adapter).
-2. A drive named **RP2350** appears in the Files app. Copy `catwheel.uf2`
-   onto it. The Pico restarts by itself when the copy finishes.
+This one step needs a computer (Mac, Windows, Linux or Chromebook). The
+iPad's Files app doesn't write to the Pico's drive in a way it accepts.
+
+1. Hold **BOOTSEL** on the Pico while plugging it into the computer.
+2. A drive appears: **RPI-RP2** for a Pico W, **RP2350** for a Pico 2 W.
+   Drag your board's `.uf2` onto it. The drive disappears within a few
+   seconds as the Pico restarts.
 3. Unplug it and connect it to the Y-cable, mouse and charger.
 
 ### 3. Setup
@@ -143,7 +154,7 @@ The Pico now has a page at **http://catwheel.local/** showing distance, mouse
 and Home Assistant status, with links to:
 
 - **Settings**: change any of the above, or the calibration.
-- **Update firmware**: pick a new `catwheel.bin` to install it over Wi-Fi.
+- **Update firmware**: pick your board's new `.bin` file to install it over Wi-Fi.
 
 Both ask for a login: username `admin` and your admin password.
 
@@ -154,8 +165,8 @@ to normal after 10 minutes if nobody uses the setup page.
 
 ### Building it yourself (optional)
 
-With [PlatformIO](https://platformio.org/) on a computer, `pio run -e pico2w`
-builds the same firmware into `.pio/build/pico2w/`.
+With [PlatformIO](https://platformio.org/) on a computer, `pio run -e picow`
+(or `-e pico2w`) builds the same firmware into `.pio/build/<board>/`.
 
 ### Logs (optional)
 

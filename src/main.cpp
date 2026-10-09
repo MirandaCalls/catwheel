@@ -155,7 +155,7 @@ void setupHomeAssistant() {
   device.setUniqueId(mac, sizeof(mac));
   device.setName("Cat Wheel");
   device.setManufacturer("DIY");
-  device.setModel("Pico 2 W wheel tracker");
+  device.setModel("Pico W wheel tracker");
   device.setSoftwareVersion("0.1.0");
   device.enableSharedAvailability();
   device.enableLastWill();
